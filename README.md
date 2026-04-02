@@ -27,35 +27,36 @@ After, you can clone the repository in your Waybar's configuration folder, or wh
 
 ## Configuration
 
-In your _config_ file add a new module, as shown in the example below.
+In your waybar `config.json` add a new module, as shown in the example below.
 
 ```json
 "custom/tailscale" : {
-"exec": "~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --status 'ipv4'",
-"on-click": "exec ~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --toggle",
-"on-click-right": "exec ~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --select-exit-node",
-"exec-on-event": true,
-"format": "         ",
-// uncomment if you want icons, don't use with tailscale.css
-// "format": "VPN {icon}",
-// "format-icons": {
-//     "connected": "󱠾 󰕥 ",
-//     "stopped": "󱠾  "
-// },
-"tooltip": true,
-"return-type": "json",
-"interval": 1,
+    "exec": "~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --status 'ipv4'",
+    "on-click": "exec ~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --toggle",
+    "on-click-right": "exec ~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --select-exit-node",
+    "exec-on-event": true,
+    "format": "         ",
+    // uncomment if you want icons, don't use with tailscale.css
+    // "format": "VPN {icon}",
+    // "format-icons": {
+    //     "connected": "󱠾 󰕥 ",
+    //     "stopped": "󱠾  "
+    // },
+    "tooltip": true,
+    "return-type": "json",
+    "interval": 1,
 },
 ```
 
 **Important!** Be sure to insert the correct path to the script in the _exec_,  _on-click_, and _on-click-right_ fields.
 The script is executed every second, but you can easily change it by modifying the _interval_ field.
 
-If you want the tailscale-logo (and not icons) add
+If you want the tailscale-logo (and not icons) add the next line on top of your waybar `style.css` (don't use with "format-icons" in waybar `config.json`)
 
-```@import "waybar-tailscale/tailscale.css";```
+```
+@import "waybar-tailscale/tailscale.css";
+```
 
-to your waybar `style.css`, don't use with "format-icons" in config.json */
 
 ### Exit node
 
