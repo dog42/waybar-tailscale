@@ -7,8 +7,10 @@ waybar-tailscale
 A super simple module to manage <a href="https://tailscale.com/"><b>Tailscale</b></a> on <a href="https://github.com/Alexays/Waybar"><b>Waybar</b></a>.
 </p>
 
-<p align="left"><img src="https://github.com/federicovolponi/waybar-tailscale/blob/main/assets/vpn-on.png" alt="AppFlowy Kanban Board for To-dos"  /></p>
-<p align="right"><img src="https://github.com/federicovolponi/waybar-tailscale/blob/main/assets/vpn-on-logo.png" alt="AppFlowy Kanban Board for To-dos"  /></p>
+<div align="center">
+  <img src="https://github.com/dog42/waybar-tailscale/blob/main/assets/vpn-on.png?raw=true" width="39%" />
+  <img src="https://github.com/dog42/waybar-tailscale/blob/main/assets/vpn-on-logo.png?raw=true" width="30%" />
+</div>
 
 ## ⭐️ What can it do?
 
@@ -70,9 +72,10 @@ The `exit-node` can be included by changing the `format` key to:
 ### Exit Node Selection
 
 You can use right-click to select an exit node.
-`wofi`  it's currently set to display the exit-node selection box, but you can update `MENU_CMD` in the script to any of the below based on what you have installed:
+`walker`  it's currently set to display the exit-node selection box, but you can update `MENU_CMD` in the script to any of the below based on what you have installed:
 
 ```bash
+walker --dmenu 'Select Exit Node'
 wofi --dmenu --prompt 'Select Exit Node'
 rofi -dmenu -p 'Select Exit Node'
 fuzzel --dmenu --prompt 'Select Exit Node'
