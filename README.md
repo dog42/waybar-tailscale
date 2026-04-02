@@ -7,7 +7,8 @@ waybar-tailscale
 A super simple module to manage <a href="https://tailscale.com/"><b>Tailscale</b></a> on <a href="https://github.com/Alexays/Waybar"><b>Waybar</b></a>.
 </p>
 
-<p align="center"><img src="https://github.com/federicovolponi/waybar-tailscale/blob/main/assets/vpn-on.png" alt="AppFlowy Kanban Board for To-dos"  /></p>
+<p align="left"><img src="https://github.com/federicovolponi/waybar-tailscale/blob/main/assets/vpn-on.png" alt="AppFlowy Kanban Board for To-dos"  /></p>
+<p align="right"><img src="https://github.com/federicovolponi/waybar-tailscale/blob/main/assets/vpn-on-logo.png" alt="AppFlowy Kanban Board for To-dos"  /></p>
 
 ## ⭐️ What can it do?
 
