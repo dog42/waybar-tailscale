@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# MENU_CMD="wofi --dmenu --prompt 'Select Exit Node'" # Change to rofi/fuzzel/dmenu as needed
-MENU_CMD="walker --dmenu 'Select Exit Node'" # Change to rofi/fuzzel/dmenu as needed
+# MENU_CMD="wofi --dmenu --prompt 'Menue'" # Change to rofi/fuzzel/dmenu as needed
+MENU_CMD="walker --dmenu 'Menue'" # Change to rofi/fuzzel/dmenu as needed
 
 tailscale_status() {
   tailscale status --json | jq -e '.BackendState == "Running"' >/dev/null
@@ -107,6 +107,9 @@ case $1 in
 
     status_json=$(tailscale status --json)
 
+    tailnet=$(tailscale switch --list --json | jq -r '
+    .[] | select(.selected == true) | .tailnet')
+
     case "$I" in
     ipv4) ip_index="0" ;;
     ipv6) ip_index="-1" ;;
@@ -133,7 +136,7 @@ case $1 in
 
     exitnode=$(jq -r '.Peer[]? | select(.ExitNode == true).DNSName | split(".")[0]' <<<"$status_json")
 
-    jq -nc --arg txt " exit-node: ${exitnode:-none}" --arg tip "$self"$'\n'"$peers" \
+    jq -nc --arg txt " exit-node: ${exitnode:-none}" --arg tip "Tailnet: ""$tailnet"$'\n\n'"$self"$'\n'"$peers" \
       '{"text": $txt, "class": "connected", "alt": "connected", "tooltip": $tip}'
   else
     echo "{\"text\":\"\",\"class\":\"stopped\",\"alt\":\"stopped\", \"tooltip\": \"The VPN is not active.\"}"
