@@ -1,7 +1,7 @@
   "custom/tailscale" : {
   "exec": "~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --status 'ipv4'",
   "on-click": "exec ~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --toggle",
-  "on-click-right": "exec ~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --select-exit-node",
+  "on-click-right": "exec ~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --menue",
   "exec-on-event": true,
   "format": "         ",
   // uncomment if you want icons, don't use with tailscale.css

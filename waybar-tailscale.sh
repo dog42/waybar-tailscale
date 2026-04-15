@@ -10,8 +10,10 @@ tailscale_status() {
 toggle_status() {
   if tailscale_status; then
     tailscale down
+    notify-send -a "Tailscale" "disabled"
   else
     tailscale up
+    notify-send -a "Tailscale" "enabled"
   fi
   sleep 3
 }
@@ -44,6 +46,37 @@ select_exit_node() {
     tailscale set --exit-node="$selected"
     notify-send -a "Tailscale" "Exit node set to: $selected"
   fi
+}
+
+switch_tailnet() {
+  local tailnets
+  local active
+  tailnets=$(tailscale switch --list --json | jq -r '
+    .[].tailnet')
+  active=$(tailscale switch --list --json | jq -r '
+    .[] | select(.selected == true) | .tailnet')
+
+  tailnets="keep $active (active)"$'\n'"$tailnets"
+
+  local selected
+  selected=$(echo "$tailnets" | $MENU_CMD)
+
+  [ -z "$selected" ] && return 0 # User cancelled
+
+  if [[ "$selected" == "keep"* ]]; then
+    notify-send -a "Tailscale" "keep Tailnet: $active"
+  else
+    tailscale switch $selected
+    notify-send -a "Tailscale" "switch to Tailnet: $selected"
+  fi
+}
+
+menue() {
+
+  local selected
+  selected=$(declare -F | sed 's/declare -f //' | sed '/menue/d' | sed '/tailscale_status/d' | $MENU_CMD)
+  echo $selected
+  $selected
 }
 
 case $1 in
@@ -111,5 +144,11 @@ case $1 in
   ;;
 --select-exit-node)
   select_exit_node
+  ;;
+--switch-tailnet)
+  switch_tailnet
+  ;;
+--menue)
+  menue
   ;;
 esac
