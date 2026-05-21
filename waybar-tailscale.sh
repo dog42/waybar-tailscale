@@ -10,10 +10,8 @@ tailscale_status() {
 toggle_status() {
   if tailscale_status; then
     tailscale down
-    notify-send -a "Tailscale" "disabled"
   else
     tailscale up
-    notify-send -a "Tailscale" "enabled"
   fi
   sleep 3
 }
@@ -72,7 +70,6 @@ switch_tailnet() {
 }
 
 menue() {
-
   local selected
   selected=$(declare -F | sed 's/declare -f //' | sed '/menue/d' | sed '/tailscale_status/d' | $MENU_CMD)
   echo $selected

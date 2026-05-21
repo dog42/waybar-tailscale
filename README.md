@@ -7,11 +7,7 @@ waybar-tailscale
 A super simple module to manage <a href="https://tailscale.com/"><b>Tailscale</b></a> on <a href="https://github.com/Alexays/Waybar"><b>Waybar</b></a>.
 </p>
 
-<div align="center">
-  <img src="https://github.com/dog42/waybar-tailscale/blob/main/assets/vpn-on.png?raw=true" width="39%" />
-  <img src="https://github.com/dog42/waybar-tailscale/blob/main/assets/vpn-on-logo.png?raw=true" width="30%" />
-</div>
-
+<p align="center"><img src="https://github.com/federicovolponi/waybar-tailscale/blob/main/assets/vpn-on.png" alt="waybar-tailscale"  /></p>
 ## ⭐️ What can it do?
 
 - Show Tailscale status and your online and offline devices
@@ -59,7 +55,6 @@ If you want the tailscale-logo (and not icons) add the next line on top of your 
 ```
 @import "waybar-tailscale/tailscale.css";
 ```
-
 
 ### Exit node
 
