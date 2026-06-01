@@ -69,6 +69,52 @@ switch_tailnet() {
   fi
 }
 
+copy_node_ip() {
+  tailscale_json=$(tailscale status --json)
+
+  walker_input=$(echo "$tailscale_json" | jq -r '
+    [ .Peer[] ] as $all
+    | ( [ $all[] | select(.Online) ] | sort_by(.HostName) ) +
+      ( [ $all[] | select(.Online | not) ] | sort_by(.HostName) )
+    | .[]
+    | if .Online then "● \(.HostName)" else "○ \(.HostName) (offline)" end')
+
+  selected_line=$(echo "$walker_input" | walker --dmenu)
+
+  if [ -z "$selected_line" ]; then
+    exit 0
+  fi
+
+  selected_host=$(echo "$selected_line" | sed -E 's/^[●○] //; s/ \(offline\)//')
+
+  if [ -z "$selected_host" ]; then
+    exit 0
+  fi
+
+  node_data=$(echo "$tailscale_json" | jq -r --arg host "$selected_host" '.Peer[] | select(.HostName == $host)')
+  ip=$(echo "$node_data" | jq -r '.TailscaleIPs[0]')
+  domain=$(echo "$node_data" | jq -r '.DNSName')
+
+  options="$ip"$'\n'"$domain"
+
+  selected_option=$(echo "$options" | walker --dmenu)
+
+  if [ -z "$selected_option" ]; then
+    exit 0
+  fi
+
+  target=$(echo "$selected_option" | sed 's/.*: //')
+
+  if command -v wl-copy &>/dev/null; then
+    echo -n "$target" | wl-copy
+  elif command -v xclip &>/dev/null; then
+    echo -n "$target" | xclip -selection clipboard
+  else
+    echo "Kopiert (Fallback): $target"
+    exit 0
+  fi
+}
+
 menue() {
   local selected
   selected=$(declare -F | sed 's/declare -f //' | sed '/menue/d' | sed '/tailscale_status/d' | $MENU_CMD)
