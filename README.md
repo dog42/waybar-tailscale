@@ -7,12 +7,19 @@ waybar-tailscale
 A super simple module to manage <a href="https://tailscale.com/"><b>Tailscale</b></a> on <a href="https://github.com/Alexays/Waybar"><b>Waybar</b></a>.
 </p>
 
-<p align="center"><img src="https://github.com/federicovolponi/waybar-tailscale/blob/main/assets/vpn-on.png" alt="waybar-tailscale"  /></p>
-## ⭐️ What can it do?
+<p align="center">
+  <img src="https://github.com/dog42/waybar-tailscale/blob/main/assets/tooltip.png?raw=true" alt="Waybar Tooltip Status" width="400" />
+</p>
+
+## What can it do?
 
 - Show Tailscale status and your online and offline devices
 - Toggle on/off the VPN
-- Show and select an exit node
+- Interactive menu (right-click) to:
+  - Select and toggle exit nodes
+  - Switch between tailnets
+  - Copy IP/DNS or open peer node web interfaces (Admin, etc.)
+  - Toggle VPN status
 
 ## Installation
 
@@ -30,9 +37,9 @@ In your waybar `config.json` add a new module, as shown in the example below.
 
 ```json
 "custom/tailscale" : {
-    "exec": "~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --status 'ipv4'",
+    "exec": "~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --status ipv4",
     "on-click": "exec ~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --toggle",
-    "on-click-right": "exec ~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --select-exit-node",
+    "on-click-right": "exec ~/.config/waybar/waybar-tailscale/waybar-tailscale.sh --menue",
     "exec-on-event": true,
     "format": "         ",
     // uncomment if you want icons, don't use with tailscale.css
@@ -56,51 +63,35 @@ If you want the tailscale-logo (and not icons) add the next line on top of your 
 @import "waybar-tailscale/tailscale.css";
 ```
 
-### Exit node
+### Menu Selection
 
-The `exit-node` can be included by changing the `format` key to:
+You can use right-click to open the interactive menu. From there, you can choose to toggle connection status, select an exit node, switch your tailnet, or copy/open peer nodes.
+`walker` is currently set to display the menu, but you can update `MENU_CMD` in the script to any of the below based on what you have installed:
 
-```json
-"format": "VPN: {icon}{text}",
-```
+<p align="center">
+  <img src="https://github.com/dog42/waybar-tailscale/blob/main/assets/menue.png?raw=true" alt="Interactive Menu Selection" width="300" />
+</p>
 
-### Exit Node Selection
 
-You can use right-click to select an exit node.
-`walker`  it's currently set to display the exit-node selection box, but you can update `MENU_CMD` in the script to any of the below based on what you have installed:
 
 ```bash
-walker --dmenu 'Select Exit Node'
-wofi --dmenu --prompt 'Select Exit Node'
-rofi -dmenu -p 'Select Exit Node'
-fuzzel --dmenu --prompt 'Select Exit Node'
-dmenu -p 'Select Exit Node'
+walker --dmenu -p Menue
+wofi --dmenu --prompt 'Menue'
+rofi -dmenu -p 'Menue'
+fuzzel --dmenu --prompt 'Menue'
+dmenu -p 'Menue'
 ```
-
-### Colored tooltip
-
-The status flag takes two optional parameters
-
-```bash
-waybar-tailscale.sh --status "#a6e22e" "#f92672"
-```
-
-The first is the color of active nodes, the second the color of inactive nodes. Defaults are respectively `green` and `red`.
 
 ### Adding IP to the tooltip
 
 By default, no IP address will be shown in the tooltip. If you want to see the `ipv4` or `ipv6` addresses, pass one of the following arguments to the script:
 
 ```bash
-waybar-tailscale.sh --status "#a6e22e" "#f92672" 'ipv4'
+waybar-tailscale.sh --status ipv4
 ```
 
 ```bash
-waybar-tailscale.sh --status "#a6e22e" "#f92672" 'ipv6'
-```
-
-```bash
-waybar-tailscale.sh --status 'ipv6'
+waybar-tailscale.sh --status ipv6
 ```
 
 ## Contributing

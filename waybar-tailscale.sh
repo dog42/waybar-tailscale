@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
 
-# MENU_CMD="wofi --dmenu --prompt 'Menue'" # Change to rofi/fuzzel/dmenu as needed
-MENU_CMD="walker --dmenu 'Menue'" # Change to rofi/fuzzel/dmenu as needed
-
-tailscale_status() {
-  tailscale status --json | jq -e '.BackendState == "Running"' >/dev/null
-}
+MENU_CMD="walker --dmenu -p Menue" # Change to rofi/fuzzel/dmenu as needed
 
 toggle_status() {
-  if tailscale_status; then
+  if tailscale status --json | jq -e '.BackendState == "Running"' >/dev/null; then
     tailscale down
   else
     tailscale up
@@ -17,183 +12,146 @@ toggle_status() {
 }
 
 select_exit_node() {
-  if ! tailscale_status; then
+  local status_json nodes selected selected_node
+  status_json=$(tailscale status --json) || return 1
+  if ! jq -e '.BackendState == "Running"' <<<"$status_json" >/dev/null; then
     notify-send -a "Tailscale" "VPN is not running"
     return 1
   fi
 
-  # Get available exit nodes (devices that advertise as exit nodes)
-  local nodes
-  nodes=$(tailscale status --json | jq -r '
-        .Peer[] | select(.ExitNodeOption == true) |
-        .DNSName')
+  nodes=$(jq -r '
+    [ .Peer[]? | select(.ExitNodeOption == true) ] as $nodes |
+    (any($nodes[]; .ExitNode)) as $has_active |
+    (if $has_active then "○ " else "● " end + "None (disable exit node)") as $none_opt |
+    $none_opt, ($nodes[] | (if .ExitNode then "● " else "○ " end) + (.DNSName | rtrimstr(".")))
+  ' <<<"$status_json")
 
-  # Add option to disable exit node
-  nodes="None (disable exit node)"$'\n'"$nodes"
+  selected=$(echo "$nodes" | $MENU_CMD) || exit 0
 
-  # Show menu and get selection
-  local selected
-  selected=$(echo "$nodes" | $MENU_CMD)
-
-  [ -z "$selected" ] && return 0 # User cancelled
-
-  if [[ "$selected" == "None"* ]]; then
+  if [[ "$selected" == *"None (disable exit node)" ]]; then
     tailscale set --exit-node=
     notify-send -a "Tailscale" "Exit node disabled"
   else
-    tailscale set --exit-node="$selected"
-    notify-send -a "Tailscale" "Exit node set to: $selected"
+    selected_node="${selected#[●○] }"
+    tailscale set --exit-node="$selected_node"
+    notify-send -a "Tailscale" "Exit node set to: $selected_node"
   fi
 }
 
 switch_tailnet() {
-  local tailnets
-  local active
-  tailnets=$(tailscale switch --list --json | jq -r '
-    .[].tailnet')
-  active=$(tailscale switch --list --json | jq -r '
-    .[] | select(.selected == true) | .tailnet')
+  local list tailnets selected selected_tailnet
+  list=$(tailscale switch --list --json) || return 1
+  tailnets=$(jq -r '.[] | (if .selected then "● " else "○ " end) + .tailnet' <<<"$list")
 
-  tailnets="keep $active (active)"$'\n'"$tailnets"
+  selected=$(echo "$tailnets" | $MENU_CMD) || exit 0
+  selected_tailnet="${selected#[●○] }"
 
-  local selected
-  selected=$(echo "$tailnets" | $MENU_CMD)
-
-  [ -z "$selected" ] && return 0 # User cancelled
-
-  if [[ "$selected" == "keep"* ]]; then
-    notify-send -a "Tailscale" "keep Tailnet: $active"
+  if [[ "$selected" == "● "* ]]; then
+    notify-send -a "Tailscale" "Tailnet $selected_tailnet is already active"
   else
-    tailscale switch $selected
-    notify-send -a "Tailscale" "switch to Tailnet: $selected"
+    tailscale switch "$selected_tailnet"
+    notify-send -a "Tailscale" "switch to Tailnet: $selected_tailnet"
   fi
 }
 
-copy_node_ip() {
-  tailscale_json=$(tailscale status --json)
+_format_peers() {
+  local status_json="$1"
+  local ip_index="$2"
+  local html="$3"
 
-  walker_input=$(echo "$tailscale_json" | jq -r '
-    [ .Peer[] ] as $all
-    | ( [ $all[] | select(.Online) ] | sort_by(.HostName) ) +
-      ( [ $all[] | select(.Online | not) ] | sort_by(.HostName) )
-    | .[]
-    | if .Online then "● \(.HostName)" else "○ \(.HostName) (offline)" end')
+  jq -r --arg Index "$ip_index" --argjson html "$html" '
+    [ .Peer[]? ] as $all |
+    ( [ $all[] | select(.Online) ]       | sort_by(.DNSName) ) +
+    ( [ $all[] | select(.Online | not) ] | sort_by(.DNSName) ) |
+    .[] |
+    (if .Online then "● " else "○ " end) as $dot |
+    (.DNSName | split(".")[0]) as $host |
+    (if $Index != "" then " (" + .TailscaleIPs[$Index|tonumber] + ")" else "" end) as $ip |
+    ($dot + $host + $ip) as $text |
+    if $html then
+      "<span color=\"" + (if .Online then "green" else "red" end) + "\">" + $text + "</span>"
+    else
+      $text
+    end
+  ' <<<"$status_json"
+}
 
-  selected_line=$(echo "$walker_input" | walker --dmenu)
+get_node() {
+  local status_json raw_peers selected_line selected_host node_data ip4 ip6 domain options target selected_option
+  status_json=$(tailscale status --json) || return 1
 
-  if [ -z "$selected_line" ]; then
-    exit 0
-  fi
+  # Format peers for picker
+  raw_peers=$(_format_peers "$status_json" "0" false)
 
-  selected_host=$(echo "$selected_line" | sed -E 's/^[●○] //; s/ \(offline\)//')
+  selected_line=$(echo "$raw_peers" | $MENU_CMD) || exit 0
+  selected_host="${selected_line#[●○] }"
+  selected_host="${selected_host% (*)}"
 
-  if [ -z "$selected_host" ]; then
-    exit 0
-  fi
+  IFS=$'\t' read -r domain ip4 ip6 <<<"$(jq -r --arg host "$selected_host" '
+    .Peer[] | select((.DNSName | split(".")[0]) == $host) | 
+    [.DNSName, .TailscaleIPs[0], .TailscaleIPs[-1]] | @tsv
+  ' <<<"$status_json")"
+  domain="${domain%.}"
 
-  node_data=$(echo "$tailscale_json" | jq -r --arg host "$selected_host" '.Peer[] | select(.HostName == $host)')
-  ip=$(echo "$node_data" | jq -r '.TailscaleIPs[0]')
-  domain=$(echo "$node_data" | jq -r '.DNSName')
+  options="$domain"$'\n'"$ip4"$'\n'"$ip6"
+  target=$(echo "$options" | $MENU_CMD) || exit 0
+  selected_option=$(echo -e "copy\nopen" | $MENU_CMD) || exit 0
 
-  options="$ip"$'\n'"$domain"
-
-  selected_option=$(echo "$options" | walker --dmenu)
-
-  if [ -z "$selected_option" ]; then
-    exit 0
-  fi
-
-  target=$(echo "$selected_option" | sed 's/.*: //')
-
-  if command -v wl-copy &>/dev/null; then
-    echo -n "$target" | wl-copy
-  elif command -v xclip &>/dev/null; then
-    echo -n "$target" | xclip -selection clipboard
-  else
-    echo "Kopiert (Fallback): $target"
-    exit 0
+  if [[ $selected_option == "open" ]]; then
+    xdg-open "https://$target"
+  elif [[ $selected_option == "copy" ]]; then
+    if command -v wl-copy &>/dev/null; then
+      echo -n "$target" | wl-copy
+    elif command -v xclip &>/dev/null; then
+      echo -n "$target" | xclip -selection clipboard
+    else
+      echo "Kopiert (Fallback): $target"
+      exit 0
+    fi
   fi
 }
 
-menue() {
+_menue() {
   local selected
-  selected=$(declare -F | sed 's/declare -f //' | sed '/menue/d' | sed '/tailscale_status/d' | $MENU_CMD)
-  echo $selected
+  selected=$(declare -F | sed -e 's/declare -f //' -e '/^_/d' | $MENU_CMD) || exit 0  # Blendet alle internen Funktionen aus (die mit "_" starten)
   $selected
 }
 
-case $1 in
---status)
-  if tailscale_status; then
-    T="green"
-    F="red"
-    I="none"
-    colors=()
+_print_status() {
+  local status_json ip_index tailnet peers self exitnode
+  
+  status_json=$(tailscale status --json) || return 1
 
-    for arg in "${@:2}"; do
-      arg_lower=$(echo "$arg" | tr '[:upper:]' '[:lower:]' | tr -d '\n')
-
-      case "$arg_lower" in
-      ipv4 | ipv6)
-        I="$arg_lower"
-        ;;
-      *)
-        if [[ -n "$arg" ]]; then
-          colors+=("$arg")
-        fi
-        ;;
-      esac
-    done
-
-    if [ ${#colors[@]} -ge 1 ]; then T="${colors[0]}"; fi
-    if [ ${#colors[@]} -ge 2 ]; then F="${colors[1]}"; fi
-
-    status_json=$(tailscale status --json)
-
-    tailnet=$(tailscale switch --list --json | jq -r '
-    .[] | select(.selected == true) | .tailnet')
-
-    case "$I" in
-    ipv4) ip_index="0" ;;
-    ipv6) ip_index="-1" ;;
-    *) ip_index="" ;;
+  if jq -e '.BackendState == "Running"' <<<"$status_json" >/dev/null; then
+    case "${1,,}" in
+      ipv4) ip_index="0" ;;
+      ipv6) ip_index="-1" ;;
+      *)    ip_index="" ;;
     esac
 
-    if [[ -n "$ip_index" ]]; then
-      peers=$(jq -r --arg T "$T" --arg F "$F" --arg Index "$ip_index" '
-                    .Peer[]? | 
-                    "<span color=\"" + (if .Online then $T else $F end) + "\">" + 
-                    (.DNSName | split(".")[0]) + ": (" + .TailscaleIPs[$Index|tonumber] + ")</span>"
-                ' <<<"$status_json")
-      self=$(jq -r ' "<span>" + (.Self.DNSName | split(".")[0]) + ": ("+ .Self.TailscaleIPs[0] + ")</span>"
-                ' <<<"$status_json")
-    else
-      peers=$(jq -r --arg T "$T" --arg F "$F" '
-                    .Peer[]? | 
-                    "<span color=\"" + (if .Online then $T else $F end) + "\">" +
-                    (.DNSName | split(".")[0]) + "</span>"
-                ' <<<"$status_json")
-      self=$(jq -r ' "<span>" + (.Self.DNSName | split(".")[0]) + "</span>"
-                ' <<<"$status_json")
-    fi
+    tailnet=$(tailscale switch --list --json | jq -r '.[] | select(.selected == true) | .tailnet')
+    
+    peers=$(_format_peers "$status_json" "$ip_index" true)
+
+    self=$(jq -r --arg Index "$ip_index" '
+      "<span>● " + (.Self.DNSName | split(".")[0]) + 
+      (if $Index != "" then " (" + .TailscaleIPs[$Index|tonumber] + ")" else "" end) + "</span>"
+      ' <<<"$status_json")
 
     exitnode=$(jq -r '.Peer[]? | select(.ExitNode == true).DNSName | split(".")[0]' <<<"$status_json")
+
     jq -nc --arg txt " exit-node: ${exitnode:-none}" --arg tip "Tailnet: ""$tailnet""${exitnode:+$'\n'"Exit-Node: $exitnode"}"$'\n\n'"$self"$'\n'"$peers" \
       '{"text": $txt, "class": "connected", "alt": "connected", "tooltip": $tip}'
   else
     echo "{\"text\":\"\",\"class\":\"stopped\",\"alt\":\"stopped\", \"tooltip\": \"The VPN is not active.\"}"
   fi
-  ;;
---toggle)
-  toggle_status
-  ;;
---select-exit-node)
-  select_exit_node
-  ;;
---switch-tailnet)
-  switch_tailnet
-  ;;
---menue)
-  menue
-  ;;
+}
+
+case $1 in
+  --status) _print_status "$2" ;;
+  --toggle) toggle_status ;;
+  --select-exit-node) select_exit_node ;;
+  --switch-tailnet) switch_tailnet ;;
+  --menue) _menue ;;
+  --get-node) get_node ;;
 esac
