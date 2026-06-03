@@ -4,7 +4,9 @@ waybar-tailscale
 </p>
 </h1>
 <p align="center">
-A super simple module to manage <a href="https://tailscale.com/"><b>Tailscale</b></a> on <a href="https://github.com/Alexays/Waybar"><b>Waybar</b></a>.
+    a simple module to manage <a href="https://tailscale.com/"><b>Tailscale</b></a> on <a href="https://github.com/Alexays/Waybar"><b>Waybar</b></a>
+    <br>
+    fork from <a href="https://github.com/federicovolponi/waybar-tailscale"><b>federicovolponi</b></a>
 </p>
 
 <p align="center">
@@ -69,10 +71,10 @@ You can use right-click to open the interactive menu. From there, you can choose
 `walker` is currently set to display the menu, but you can update `MENU_CMD` in the script to any of the below based on what you have installed:
 
 <p align="center">
-  <img src="https://github.com/dog42/waybar-tailscale/blob/main/assets/menue.png?raw=true" alt="Interactive Menu Selection" width="300" />
+  <img src="https://github.com/dog42/waybar-tailscale/blob/main/assets/menue.png?raw=true" alt="Interactive Menu Selection" width="450" />
 </p>
 
-
+`walker` is currently set to display the menu, but you can update `MENU_CMD` in the script to any of the below based on what you have installed:
 
 ```bash
 walker --dmenu -p Menue
@@ -81,6 +83,16 @@ rofi -dmenu -p 'Menue'
 fuzzel --dmenu --prompt 'Menue'
 dmenu -p 'Menue'
 ```
+The individual menu items can also be called directly with corresponding flags for the script:
+
+```bash
+waybar-tailscale.sh --menue
+waybar-tailscale.sh --toggle
+waybar-tailscale.sh --select-exit-node
+waybar-tailscale.sh --switch-tailnet
+waybar-tailscale.sh --get-node
+```
+
 
 ### Adding IP to the tooltip
 
@@ -88,9 +100,6 @@ By default, no IP address will be shown in the tooltip. If you want to see the `
 
 ```bash
 waybar-tailscale.sh --status ipv4
-```
-
-```bash
 waybar-tailscale.sh --status ipv6
 ```
 
