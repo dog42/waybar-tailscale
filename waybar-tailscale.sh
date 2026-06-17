@@ -58,14 +58,15 @@ _format_peers() {
   local status_json="$1"
   local ip_index="$2"
   local html="$3"
+  local use_fqdn="$4"
 
-  jq -r --arg Index "$ip_index" --argjson html "$html" '
+  jq -r --arg Index "$ip_index" --argjson html "$html" --argjson fqdn "${use_fqdn:-false}" '
     [ .Peer[]? ] as $all |
     ( [ $all[] | select(.Online) ]       | sort_by(.DNSName) ) +
     ( [ $all[] | select(.Online | not) ] | sort_by(.DNSName) ) |
     .[] |
     (if .Online then "● " else "○ " end) as $dot |
-    (.DNSName | split(".")[0]) as $host |
+    (if $fqdn then (.DNSName | rtrimstr(".")) else (.DNSName | split(".")[0]) end) as $host |
     (if $Index != "" then " (" + .TailscaleIPs[$Index|tonumber] + ")" else "" end) as $ip |
     ($dot + $host + $ip) as $text |
     if $html then
@@ -76,24 +77,61 @@ _format_peers() {
   ' <<<"$status_json"
 }
 
+_format_services() {
+  local status_json="$1"
+  local ip_index="$2"
+  local html="$3"
+  local use_fqdn="$4"
+
+  jq -r --arg Index "$ip_index" --argjson html "$html" --argjson fqdn "${use_fqdn:-false}" '
+    .MagicDNSSuffix as $suffix |
+    ([.Self] + [.Peer[]?]) | .[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[] |
+    (.Name | sub("^svc:"; "")) as $name |
+    (if $fqdn then $name + "." + $suffix else $name end) as $display_name |
+    (if $Index != "" then " (" + .Addrs[$Index|tonumber] + ")" else "" end) as $ip |
+    ("★ " + $display_name + $ip) as $text |
+    if $html then
+      "<span color=\"#7aa2f7\">" + $text + "</span>"
+    else
+      $text
+    end
+  ' <<<"$status_json" | sort
+}
+
 get_node() {
-  local status_json raw_peers selected_line selected_host node_data ip4 ip6 domain options target selected_option
+  local status_json raw_peers raw_services selected_line selected_host node_data ip4 ip6 domain options target selected_option
   status_json=$(tailscale status --json) || return 1
 
-  # Format peers for picker
-  raw_peers=$(_format_peers "$status_json" "0" false)
+  # Format peers and services for picker (using short names, no IP)
+  raw_peers=$(_format_peers "$status_json" "" false false)
+  raw_services=$(_format_services "$status_json" "" false false)
 
-  selected_line=$(echo "$raw_peers" | $MENU_CMD) || exit 0
-  selected_host="${selected_line#[●○] }"
-  selected_host="${selected_host% (*)}"
+  selected_line=$(printf "%s\n%s" "$raw_peers" "$raw_services" | grep . | sort -k2 -f | $MENU_CMD) || exit 0
 
-  IFS=$'\t' read -r domain ip4 ip6 <<<"$(jq -r --arg host "$selected_host" '
-    .Peer[] | select((.DNSName | split(".")[0]) == $host) | 
-    [.DNSName, .TailscaleIPs[0], .TailscaleIPs[-1]] | @tsv
-  ' <<<"$status_json")"
-  domain="${domain%.}"
+  if [[ "$selected_line" == "★ "* ]]; then
+    # Service selected
+    selected_host="${selected_line#★ }"
+    local suffix=$(jq -r '.MagicDNSSuffix' <<<"$status_json")
+    domain="$selected_host.$suffix"
+    
+    options=$(jq -r --arg name "svc:$selected_host" '
+      ([.Self] + [.Peer[]?]) | .[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[] |
+      select(.Name == $name) |
+      .Addrs[]
+    ' <<<"$status_json")
+    options="$domain"$'\n'"$options"
+  else
+    # Peer selected
+    selected_host="${selected_line#[●○] }"
+    
+    IFS=$'\t' read -r domain ip4 ip6 <<<"$(jq -r --arg host "$selected_host" '
+      ([.Self] + [.Peer[]?]) | .[] | select((.DNSName | split(".")[0]) == $host) | 
+      [.DNSName, .TailscaleIPs[0], .TailscaleIPs[-1]] | @tsv
+    ' <<<"$status_json")"
+    domain="${domain%.}"
+    options="$domain"$'\n'"$ip4"$'\n'"$ip6"
+  fi
 
-  options="$domain"$'\n'"$ip4"$'\n'"$ip6"
   target=$(echo "$options" | $MENU_CMD) || exit 0
   selected_option=$(echo -e "copy\nopen" | $MENU_CMD) || exit 0
 
@@ -118,7 +156,7 @@ _menue() {
 }
 
 _print_status() {
-  local status_json ip_index tailnet peers self exitnode
+  local status_json ip_index tailnet peers services self exitnode
   
   status_json=$(tailscale status --json) || return 1
 
@@ -132,6 +170,7 @@ _print_status() {
     tailnet=$(tailscale switch --list --json | jq -r '.[] | select(.selected == true) | .tailnet')
     
     peers=$(_format_peers "$status_json" "$ip_index" true)
+    services=$(_format_services "$status_json" "$ip_index" true)
 
     self=$(jq -r --arg Index "$ip_index" '
       "<span>● " + (.Self.DNSName | split(".")[0]) + 
@@ -140,7 +179,8 @@ _print_status() {
 
     exitnode=$(jq -r '.Peer[]? | select(.ExitNode == true).DNSName | split(".")[0]' <<<"$status_json")
 
-    jq -nc --arg txt " exit-node: ${exitnode:-none}" --arg tip "Tailnet: ""$tailnet""${exitnode:+$'\n'"Exit-Node: $exitnode"}"$'\n\n'"$self"$'\n'"$peers" \
+    jq -nc --arg txt " exit-node: ${exitnode:-none}" \
+           --arg tip "Tailnet: ""$tailnet""${exitnode:+$'\n'"Exit-Node: $exitnode"}"$'\n\n'"$self"$'\n'"$peers"${services:+$'\n\n'"Services:"$'\n'"$services"} \
       '{"text": $txt, "class": "connected", "alt": "connected", "tooltip": $tip}'
   else
     echo "{\"text\":\"\",\"class\":\"stopped\",\"alt\":\"stopped\", \"tooltip\": \"The VPN is not active.\"}"
