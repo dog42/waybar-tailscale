@@ -3,18 +3,20 @@
  * to your style.css, don't use with "format-icons" in config.json */
 
 #custom-tailscale {
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: contain;
-    min-width: 24px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  min-width: 18px;
+  margin: 0 7.5px;
+  font-size: 18px;
 }
 
 /* if return is {"class": "connected"} */
 #custom-tailscale.connected {
-    background-image: url("icon/tailscale_on.png");
+  background-image: url("icon/tailscale_on.png");
 }
 
 /* if return is {"class": "stopped"} */
 #custom-tailscale.stopped {
-    background-image: url("icon/tailscale_off.png");
+  background-image: url("icon/tailscale_off.png");
 }
