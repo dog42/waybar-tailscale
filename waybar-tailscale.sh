@@ -126,13 +126,17 @@ get_node() {
     # Peer selected
     selected_host="${selected_line#[●○] }"
     
-    IFS=$'\t' read -r domain ip4 ip6 <<<"$(jq -r --arg host "$selected_host" '
+    IFS=$'\t' read -r domain ip4 ip6 has_ssh <<<"$(jq -r --arg host "$selected_host" '
       ([.Self] + [.Peer[]?]) | .[] | select((.DNSName | split(".")[0]) == $host) | 
-      [.DNSName, .TailscaleIPs[0], .TailscaleIPs[-1]] | @tsv
+      (if (.sshHostKeys != null and (.sshHostKeys | length > 0)) then "true" else "false" end) as $has_ssh |
+      [.DNSName, .TailscaleIPs[0], .TailscaleIPs[-1], $has_ssh] | @tsv
     ' <<<"$status_json")"
     domain="${domain%.}"
     options="$domain"$'\n'"$ip4"$'\n'"$ip6"
-    available_actions="copy\nopen\nssh"
+    available_actions="copy\nopen"
+    if [[ "$has_ssh" == "true" ]]; then
+      available_actions+="\nssh"
+    fi
   fi
 
   target=$(echo "$options" | $MENU_CMD) || exit 0
