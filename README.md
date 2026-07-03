@@ -20,7 +20,7 @@ waybar-tailscale
 - Interactive menu (right-click) to:
   - Select and toggle exit nodes
   - Switch between tailnets
-  - Copy IP/DNS or open peer node web interfaces (Admin, etc.)
+  - Get node details (copy IP/Hostname, open web interfaces/services, or SSH into nodes)
   - Toggle VPN status
 
 ## Installation
@@ -67,7 +67,7 @@ If you want the tailscale-logo (and not icons) add the next line on top of your 
 
 ### Menu Selection
 
-You can use right-click to open the interactive menu. From there, you can choose to toggle connection status, select an exit node, switch your tailnet, or copy/open peer nodes.
+You can use right-click to open the interactive menu. From there, you can choose to toggle connection status, select an exit node, switch your tailnet, or interact with nodes (copy IP/Hostname, open in browser, or SSH).
 `walker` is currently set to display the menu, but you can update `MENU_CMD` in the script to any of the below based on what you have installed:
 
 <p align="center">

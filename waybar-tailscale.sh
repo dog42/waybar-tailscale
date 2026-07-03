@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 MENU_CMD="walker --dmenu -p Menue" # Change to rofi/fuzzel/dmenu as needed
+TERM_CMD="kitty" # Change to your preferred terminal emulator
 
 toggle_status() {
   if tailscale status --json | jq -e '.BackendState == "Running"' >/dev/null; then
@@ -120,6 +121,7 @@ get_node() {
       .Addrs[]
     ' <<<"$status_json")
     options="$domain"$'\n'"$options"
+    available_actions="copy\nopen"
   else
     # Peer selected
     selected_host="${selected_line#[●○] }"
@@ -130,10 +132,11 @@ get_node() {
     ' <<<"$status_json")"
     domain="${domain%.}"
     options="$domain"$'\n'"$ip4"$'\n'"$ip6"
+    available_actions="copy\nopen\nssh"
   fi
 
   target=$(echo "$options" | $MENU_CMD) || exit 0
-  selected_option=$(echo -e "copy\nopen" | $MENU_CMD) || exit 0
+  selected_option=$(echo -e "$available_actions" | $MENU_CMD) || exit 0
 
   if [[ $selected_option == "open" ]]; then
     xdg-open "https://$target"
@@ -146,6 +149,8 @@ get_node() {
       echo "Kopiert (Fallback): $target"
       exit 0
     fi
+  elif [[ $selected_option == "ssh" ]]; then
+    $TERM_CMD -e ssh "root@$target"
   fi
 }
 
