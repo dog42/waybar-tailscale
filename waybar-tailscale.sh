@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 MENU_CMD="walker --dmenu -p Menue" # Change to rofi/fuzzel/dmenu as needed
-TERM_CMD="kitty" # Change to your preferred terminal emulator
+TERM_CMD="kitty"                   # Change to your preferred terminal emulator
 
 toggle_status() {
   if tailscale status --json | jq -e '.BackendState == "Running"' >/dev/null; then
@@ -114,7 +114,7 @@ get_node() {
     selected_host="${selected_line#★ }"
     local suffix=$(jq -r '.MagicDNSSuffix' <<<"$status_json")
     domain="$selected_host.$suffix"
-    
+
     options=$(jq -r --arg name "svc:$selected_host" '
       ([.Self] + [.Peer[]?]) | .[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[] |
       select(.Name == $name) |
@@ -125,7 +125,7 @@ get_node() {
   else
     # Peer selected
     selected_host="${selected_line#[●○] }"
-    
+
     IFS=$'\t' read -r domain ip4 ip6 has_ssh <<<"$(jq -r --arg host "$selected_host" '
       ([.Self] + [.Peer[]?]) | .[] | select((.DNSName | split(".")[0]) == $host) | 
       (if (.sshHostKeys != null and (.sshHostKeys | length > 0)) then "true" else "false" end) as $has_ssh |
@@ -160,24 +160,24 @@ get_node() {
 
 _menue() {
   local selected
-  selected=$(declare -F | sed -e 's/declare -f //' -e '/^_/d' | $MENU_CMD) || exit 0  # Blendet alle internen Funktionen aus (die mit "_" starten)
+  selected=$(declare -F | sed -e 's/declare -f //' -e '/^_/d' | $MENU_CMD) || exit 0 # Blendet alle internen Funktionen aus (die mit "_" starten)
   $selected
 }
 
 _print_status() {
   local status_json ip_index tailnet peers services self exitnode
-  
+
   status_json=$(tailscale status --json) || return 1
+  version=$(tailscale version --json | jq -r ".short")
 
   if jq -e '.BackendState == "Running"' <<<"$status_json" >/dev/null; then
     case "${1,,}" in
-      ipv4) ip_index="0" ;;
-      ipv6) ip_index="-1" ;;
-      *)    ip_index="" ;;
+    ipv4) ip_index="0" ;;
+    ipv6) ip_index="-1" ;;
+    *) ip_index="" ;;
     esac
 
     tailnet=$(tailscale switch --list --json | jq -r '.[] | select(.selected == true) | .tailnet')
-    
     peers=$(_format_peers "$status_json" "$ip_index" true)
     services=$(_format_services "$status_json" "$ip_index" true)
 
@@ -189,7 +189,7 @@ _print_status() {
     exitnode=$(jq -r '.Peer[]? | select(.ExitNode == true).DNSName | split(".")[0]' <<<"$status_json")
 
     jq -nc --arg txt " exit-node: ${exitnode:-none}" \
-           --arg tip "Tailnet: ""$tailnet""${exitnode:+$'\n'"Exit-Node: $exitnode"}"$'\n\n'"$self"$'\n'"$peers"${services:+$'\n\n'"Services:"$'\n'"$services"} \
+      --arg tip "Tailnet: ""$tailnet""${exitnode:+$'\n'"Exit-Node: $exitnode"}"$'\n\n'"$self"$'\n'"  @ v""$version"$'\n'"$peers"${services:+$'\n\n'"Services:"$'\n'"$services"} \
       '{"text": $txt, "class": "connected", "alt": "connected", "tooltip": $tip}'
   else
     echo "{\"text\":\"\",\"class\":\"stopped\",\"alt\":\"stopped\", \"tooltip\": \"The VPN is not active.\"}"
@@ -197,10 +197,10 @@ _print_status() {
 }
 
 case $1 in
-  --status) _print_status "$2" ;;
-  --toggle) toggle_status ;;
-  --select-exit-node) select_exit_node ;;
-  --switch-tailnet) switch_tailnet ;;
-  --menue) _menue ;;
-  --get-node) get_node ;;
+--status) _print_status "$2" ;;
+--toggle) toggle_status ;;
+--select-exit-node) select_exit_node ;;
+--switch-tailnet) switch_tailnet ;;
+--menue) _menue ;;
+--get-node) get_node ;;
 esac
