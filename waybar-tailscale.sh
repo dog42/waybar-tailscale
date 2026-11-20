@@ -98,22 +98,90 @@ _format_services() {
   local ip_index="$2"
   local html="$3"
   local use_fqdn="$4"
+  local live_check="${5:-false}"
+  local raw_lines line online name text check_ip check_port
+  local -a lines=() on_lines=() off_lines=()
 
-  jq -r --arg Index "$ip_index" --argjson html "$html" --argjson fqdn "${use_fqdn:-false}" '
+  raw_lines=$(jq -r --arg Index "$ip_index" --argjson html "$html" --argjson fqdn "${use_fqdn:-false}" "$_JQ_PEER_DEFS"'
     .MagicDNSSuffix as $suffix |
+    ([.Self] + peers) as $all |
     # a service may be advertised by several nodes -> show each service only once
-    [ ([.Self] + [.Peer[]?]) | .[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[]? | select(.Name != null) ]
-    | unique_by(.Name) | .[] |
+    [ $all[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[]? | select(.Name != null) ]
+    | unique_by(.Name) | sort_by(.Name) | .[] |
+    . as $svc |
     (.Name | sub("^svc:"; "")) as $name |
     (if $fqdn then $name + "." + $suffix else $name end) as $display_name |
     (if $Index != "" then " (" + (.Addrs[$Index|tonumber] // "?") + ")" else "" end) as $ip |
-    ("★ " + $display_name + $ip) as $text |
-    if $html then
-      "<span color=\"#7aa2f7\">" + $text + "</span>"
+    [ $all[] | . as $n | select(any(($svc.Addrs // [])[]; . as $sip | (($n.AllowedIPs // []) + ($n.PrimaryRoutes // [])) | any(startswith($sip)))) ] as $hosts |
+    (if ($hosts | length) > 0 then ([ $hosts[] | display_name($all) ] | unique | join(",")) else "" end) as $host_str |
+    (if ($hosts | length) > 0 then any($hosts[]; .Online) else true end) as $host_online |
+    (if $host_str != "" then " [" + $host_str + "]" else "" end) as $host_tag |
+    (($svc.Addrs // [])[0] // "") as $first_ip |
+    ([ ($svc.Ports // [])[] | select(startswith("tcp:")) | sub("^tcp:"; "") ][0] // "") as $first_port |
+    [
+      (if $host_online then "1" else "0" end),
+      $name,
+      ($display_name + $ip + $host_tag),
+      $first_ip,
+      $first_port
+    ] | @tsv
+  ' <<<"$status_json")
+
+  [[ -z "$raw_lines" ]] && return 0
+
+  if [[ "$live_check" == "true" ]]; then
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    while IFS=$'\t' read -r online name text check_ip check_port; do
+      if [[ "$online" == "1" && -n "$check_ip" && -n "$check_port" ]]; then
+        (
+          if timeout 0.3 bash -c "</dev/tcp/$check_ip/$check_port" 2>/dev/null; then
+            echo "1" >"$tmpdir/$name"
+          else
+            echo "0" >"$tmpdir/$name"
+          fi
+        ) &
+      else
+        echo "$online" >"$tmpdir/$name"
+      fi
+      lines+=("$online"$'\t'"$name"$'\t'"$text")
+    done <<<"$raw_lines"
+    wait
+
+    for line in "${lines[@]}"; do
+      IFS=$'\t' read -r online name text <<<"$line"
+      [[ -f "$tmpdir/$name" ]] && online=$(<"$tmpdir/$name")
+      if [[ "$online" == "1" ]]; then
+        on_lines+=("$text")
+      else
+        off_lines+=("$text")
+      fi
+    done
+    rm -rf "$tmpdir"
+  else
+    while IFS=$'\t' read -r online name text check_ip check_port; do
+      if [[ "$online" == "1" ]]; then
+        on_lines+=("$text")
+      else
+        off_lines+=("$text")
+      fi
+    done <<<"$raw_lines"
+  fi
+
+  for text in "${on_lines[@]}"; do
+    if [[ "$html" == "true" ]]; then
+      printf '<span color="#7aa2f7">★ %s</span>\n' "$text"
     else
-      $text
-    end
-  ' <<<"$status_json"
+      printf '★ %s\n' "$text"
+    fi
+  done
+  for text in "${off_lines[@]}"; do
+    if [[ "$html" == "true" ]]; then
+      printf '<span color="red">☆ %s</span>\n' "$text"
+    else
+      printf '☆ %s\n' "$text"
+    fi
+  done
 }
 
 get_node() {
@@ -122,14 +190,15 @@ get_node() {
 
   # Format peers and services for picker (using short names, no IP)
   raw_peers=$(_format_peers "$status_json" "" false false)
-  raw_services=$(_format_services "$status_json" "" false false)
+  raw_services=$(_format_services "$status_json" "" false false true)
 
   # Order: online peers, offline peers (both alphabetical, see _format_peers), then services
   selected_line=$(printf "%s\n%s" "$raw_peers" "$raw_services" | grep . | $MENU_CMD) || exit 0
 
-  if [[ "$selected_line" == "★ "* ]]; then
-    # Service selected
-    selected_host="${selected_line#★ }"
+  if [[ "$selected_line" == [★☆]" "* ]]; then
+    # Service selected (strip leading star and trailing " [node]" tag)
+    selected_host="${selected_line#[★☆] }"
+    selected_host="${selected_host% \[*\]}"
     suffix=$(jq -r '.MagicDNSSuffix' <<<"$status_json")
     domain="$selected_host.$suffix"
 
