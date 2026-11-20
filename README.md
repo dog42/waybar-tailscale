@@ -33,6 +33,8 @@ tailscale set --operator=$USER
 
 After, you can clone the repository in your Waybar's configuration folder, or where you prefer.
 
+> **Note:** A [Nerd Font](https://www.nerdfonts.com/) (or a symbol fallback package such as `ttf-nerd-fonts-symbols`) is recommended so that the status icons for nodes (` ` / ` `) and services (` ` / ` `) in the tooltip and menus are rendered properly.
+
 ## Configuration
 
 In your waybar `config.json` add a new module, as shown in the example below.
