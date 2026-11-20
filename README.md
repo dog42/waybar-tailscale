@@ -93,6 +93,8 @@ waybar-tailscale.sh --switch-tailnet
 waybar-tailscale.sh --get-node
 ```
 
+The `ssh` action is offered for nodes running Tailscale SSH and opens a session in `TERM_CMD`. Set `SSH_USER` in the script to log in as a specific user (e.g. `SSH_USER="root"`); if left empty, `ssh` uses your `~/.ssh/config` or your local username.
+
 
 ### Adding IP to the tooltip
 

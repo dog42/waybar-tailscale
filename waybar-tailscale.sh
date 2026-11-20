@@ -2,6 +2,7 @@
 
 MENU_CMD="walker --dmenu -p Menue" # Change to rofi/fuzzel/dmenu as needed
 TERM_CMD="kitty"                   # Change to your preferred terminal emulator
+SSH_USER=""                        # SSH login user; empty = let ssh decide (~/.ssh/config / local user)
 
 toggle_status() {
   if tailscale status --json | jq -e '.BackendState == "Running"' >/dev/null; then
@@ -174,7 +175,7 @@ get_node() {
       exit 0
     fi
   elif [[ $selected_option == "ssh" ]]; then
-    $TERM_CMD -e ssh "root@$target"
+    $TERM_CMD -e ssh "${SSH_USER:+$SSH_USER@}$target"
   fi
 }
 
