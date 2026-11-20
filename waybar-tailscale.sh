@@ -192,8 +192,13 @@ get_node() {
   raw_peers=$(_format_peers "$status_json" "" false false)
   raw_services=$(_format_services "$status_json" "" false false true)
 
-  # Order: online peers, offline peers (both alphabetical, see _format_peers), then services
-  selected_line=$(printf "%s\n%s" "$raw_peers" "$raw_services" | grep . | $MENU_CMD) || exit 0
+  # Order: online peers (●) + online services (★), then offline peers (○) + offline services (☆)
+  selected_line=$(
+    {
+      grep -E '^[●★]' <<<"$raw_peers"$'\n'"$raw_services"
+      grep -E '^[○☆]' <<<"$raw_peers"$'\n'"$raw_services"
+    } | $MENU_CMD
+  ) || exit 0
 
   if [[ "$selected_line" == [★☆]" "* ]]; then
     # Service selected (strip leading star and trailing " [node]" tag)
