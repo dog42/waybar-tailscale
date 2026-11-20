@@ -68,7 +68,6 @@ If you want the tailscale-logo (and not icons) add the next line on top of your 
 ### Menu Selection
 
 You can use right-click to open the interactive menu. From there, you can choose to toggle connection status, select an exit node, switch your tailnet, or interact with nodes (copy IP/Hostname, open in browser, or SSH).
-`walker` is currently set to display the menu, but you can update `MENU_CMD` in the script to any of the below based on what you have installed:
 
 <p align="center">
   <img src="https://github.com/dog42/waybar-tailscale/blob/main/assets/menue.png?raw=true" alt="Interactive Menu Selection" width="450" />
