@@ -55,20 +55,33 @@ switch_tailnet() {
   fi
 }
 
+# Shared jq helpers for peer handling
+# - peers:        all valid peers; ignores stale engine-only peers (e.g. after "tailscale switch"): no name, no IPs, not in netmap
+# - short_name:   first DNS label ("host" of "host.tailnet.ts.net.")
+# - display_name($all): short name, or "host.tailnet" if the short name is not unique among $all
+_JQ_PEER_DEFS='
+  def peers: [ .Peer[]? | select(.InNetworkMap != false and (.DNSName // "") != "") ];
+  def short_name: .DNSName | split(".")[0];
+  def display_name($all):
+    short_name as $s |
+    if ([ $all[] | select(short_name == $s) ] | length) > 1
+    then .DNSName | rtrimstr(".") | split(".")[0:2] | join(".")
+    else $s end;
+'
+
 _format_peers() {
   local status_json="$1"
   local ip_index="$2"
   local html="$3"
   local use_fqdn="$4"
 
-  jq -r --arg Index "$ip_index" --argjson html "$html" --argjson fqdn "${use_fqdn:-false}" '
-    # Ignore stale engine-only peers (e.g. after "tailscale switch"): no name, no IPs, not in netmap
-    [ .Peer[]? | select(.InNetworkMap != false and (.DNSName // "") != "") ] as $all |
+  jq -r --arg Index "$ip_index" --argjson html "$html" --argjson fqdn "${use_fqdn:-false}" "$_JQ_PEER_DEFS"'
+    peers as $all |
     ( [ $all[] | select(.Online) ]       | sort_by(.DNSName) ) +
     ( [ $all[] | select(.Online | not) ] | sort_by(.DNSName) ) |
     .[] |
     (if .Online then "● " else "○ " end) as $dot |
-    (if $fqdn then (.DNSName | rtrimstr(".")) else (.DNSName | split(".")[0]) end) as $host |
+    (if $fqdn then (.DNSName | rtrimstr(".")) else display_name($all) end) as $host |
     (if $Index != "" then " (" + .TailscaleIPs[$Index|tonumber] + ")" else "" end) as $ip |
     ($dot + $host + $ip) as $text |
     if $html then
@@ -129,8 +142,8 @@ get_node() {
     # Peer selected
     selected_host="${selected_line#[●○] }"
 
-    IFS=$'\t' read -r domain ip4 ip6 has_ssh <<<"$(jq -r --arg host "$selected_host" '
-      ([.Self] + [.Peer[]?]) | .[] | select((.DNSName | split(".")[0]) == $host) | 
+    IFS=$'\t' read -r domain ip4 ip6 has_ssh <<<"$(jq -r --arg label "$selected_host" "$_JQ_PEER_DEFS"'
+      peers as $all | first($all[] | select(display_name($all) == $label)) |
       (if (.sshHostKeys != null and (.sshHostKeys | length > 0)) then "true" else "false" end) as $has_ssh |
       [.DNSName, .TailscaleIPs[0], .TailscaleIPs[-1], $has_ssh] | @tsv
     ' <<<"$status_json")"
