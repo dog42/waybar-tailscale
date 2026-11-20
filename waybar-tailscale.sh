@@ -170,16 +170,16 @@ _format_services() {
 
   for text in "${on_lines[@]}"; do
     if [[ "$html" == "true" ]]; then
-      printf '<span color="#7aa2f7">★ %s</span>\n' "$text"
+      printf '<span color="#7aa2f7"> %s</span>\n' "$text"
     else
-      printf '★ %s\n' "$text"
+      printf ' %s\n' "$text"
     fi
   done
   for text in "${off_lines[@]}"; do
     if [[ "$html" == "true" ]]; then
-      printf '<span color="red">☆ %s</span>\n' "$text"
+      printf '<span color="red"> %s</span>\n' "$text"
     else
-      printf '☆ %s\n' "$text"
+      printf ' %s\n' "$text"
     fi
   done
 }
@@ -192,17 +192,17 @@ get_node() {
   raw_peers=$(_format_peers "$status_json" "" false false)
   raw_services=$(_format_services "$status_json" "" false false true)
 
-  # Order: online peers (●) + online services (★), then offline peers (○) + offline services (☆)
+  # Order: online peers (●) + online services (), then offline peers (○) + offline services ()
   selected_line=$(
     {
-      grep -E '^[●★]' <<<"$raw_peers"$'\n'"$raw_services"
-      grep -E '^[○☆]' <<<"$raw_peers"$'\n'"$raw_services"
+      grep -E '^[●]' <<<"$raw_peers"$'\n'"$raw_services"
+      grep -E '^[○]' <<<"$raw_peers"$'\n'"$raw_services"
     } | $MENU_CMD
   ) || exit 0
 
-  if [[ "$selected_line" == [★☆]" "* ]]; then
+  if [[ "$selected_line" == []" "* ]]; then
     # Service selected (strip leading star and trailing " [node]" tag)
-    selected_host="${selected_line#[★☆] }"
+    selected_host="${selected_line#[] }"
     selected_host="${selected_host% \[*\]}"
     suffix=$(jq -r '.MagicDNSSuffix' <<<"$status_json")
     domain="$selected_host.$suffix"
