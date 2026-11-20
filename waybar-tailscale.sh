@@ -87,17 +87,19 @@ _format_services() {
 
   jq -r --arg Index "$ip_index" --argjson html "$html" --argjson fqdn "${use_fqdn:-false}" '
     .MagicDNSSuffix as $suffix |
-    ([.Self] + [.Peer[]?]) | .[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[] |
+    # a service may be advertised by several nodes -> show each service only once
+    [ ([.Self] + [.Peer[]?]) | .[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[]? | select(.Name != null) ]
+    | unique_by(.Name) | .[] |
     (.Name | sub("^svc:"; "")) as $name |
     (if $fqdn then $name + "." + $suffix else $name end) as $display_name |
-    (if $Index != "" then " (" + .Addrs[$Index|tonumber] + ")" else "" end) as $ip |
+    (if $Index != "" then " (" + (.Addrs[$Index|tonumber] // "?") + ")" else "" end) as $ip |
     ("★ " + $display_name + $ip) as $text |
     if $html then
       "<span color=\"#7aa2f7\">" + $text + "</span>"
     else
       $text
     end
-  ' <<<"$status_json" | sort
+  ' <<<"$status_json"
 }
 
 get_node() {
@@ -117,10 +119,10 @@ get_node() {
     domain="$selected_host.$suffix"
 
     options=$(jq -r --arg name "svc:$selected_host" '
-      ([.Self] + [.Peer[]?]) | .[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[] |
+      ([.Self] + [.Peer[]?]) | .[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[]? |
       select(.Name == $name) |
-      .Addrs[]
-    ' <<<"$status_json")
+      .Addrs[]?
+    ' <<<"$status_json" | awk '!seen[$0]++') # keep every distinct IP, drop exact duplicates
     options="$domain"$'\n'"$options"
     available_actions="copy\nopen"
   else
@@ -144,7 +146,11 @@ get_node() {
   selected_option=$(echo -e "$available_actions" | $MENU_CMD) || exit 0
 
   if [[ $selected_option == "open" ]]; then
-    xdg-open "https://$target"
+    if [[ "$target" == *:* ]]; then
+      xdg-open "https://[$target]" # IPv6 literals need brackets in URLs
+    else
+      xdg-open "https://$target"
+    fi
   elif [[ $selected_option == "copy" ]]; then
     if command -v wl-copy &>/dev/null; then
       echo -n "$target" | wl-copy
@@ -168,7 +174,10 @@ _menue() {
 _print_status() {
   local status_json ip_index tailnet peers services self exitnode
 
-  status_json=$(tailscale status --json) || return 1
+  if ! status_json=$(tailscale status --json 2>/dev/null); then
+    echo "{\"text\":\"\",\"class\":\"stopped\",\"alt\":\"stopped\", \"tooltip\": \"tailscaled is not running.\"}"
+    return 0
+  fi
   version=$(tailscale version --json | jq -r ".short")
 
   if jq -e '.BackendState == "Running"' <<<"$status_json" >/dev/null; then
