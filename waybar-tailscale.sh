@@ -68,6 +68,24 @@ _JQ_PEER_DEFS='
     if ([ $all[] | select(short_name == $s) ] | length) > 1
     then .DNSName | rtrimstr(".") | split(".")[0:2] | join(".")
     else $s end;
+  def rpad($len): . + (" " * ([0, $len - length] | max));
+  def services_all($all):
+    [ $all[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[]? | select(.Name != null) ]
+    | unique_by(.Name) | sort_by(.Name);
+  def max_name_width($all; $fqdn; $suffix):
+    ([
+      (.Self.DNSName | split(".")[0]),
+      ($all[] | if $fqdn then (.DNSName | rtrimstr(".")) else display_name($all) end),
+      (services_all($all)[] | (.Name | sub("^svc:"; "")) as $n | if $fqdn then $n + "." + $suffix else $n end)
+    ] | map(length) | max // 0);
+  def max_ip_width($all; $Index):
+    if $Index == "" then 0 else
+      ([
+        ("(" + (.Self.TailscaleIPs[$Index|tonumber] // "?") + ")"),
+        ($all[] | "(" + (.TailscaleIPs[$Index|tonumber] // "?") + ")"),
+        (services_all($all)[] | "(" + (.Addrs[$Index|tonumber] // "?") + ")")
+      ] | map(length) | max // 0)
+    end;
 '
 
 _format_peers() {
@@ -78,13 +96,15 @@ _format_peers() {
 
   jq -r --arg Index "$ip_index" --argjson html "$html" --argjson fqdn "${use_fqdn:-false}" "$_JQ_PEER_DEFS"'
     peers as $all |
+    ([.Self] + $all) as $nodes |
+    max_name_width($nodes; $fqdn; .MagicDNSSuffix) as $nw |
     ( [ $all[] | select(.Online) ]       | sort_by(.DNSName) ) +
     ( [ $all[] | select(.Online | not) ] | sort_by(.DNSName) ) |
     .[] |
     (if .Online then " " else " " end) as $dot |
     (if $fqdn then (.DNSName | rtrimstr(".")) else display_name($all) end) as $host |
-    (if $Index != "" then " (" + .TailscaleIPs[$Index|tonumber] + ")" else "" end) as $ip |
-    ($dot + $host + $ip) as $text |
+    (if $Index != "" then ($host | rpad($nw)) + " (" + .TailscaleIPs[$Index|tonumber] + ")" else $host end) as $cols |
+    ($dot + $cols) as $text |
     if $html then
       "<span color=\"" + (if .Online then "green" else "red" end) + "\">" + $text + "</span>"
     else
@@ -104,24 +124,34 @@ _format_services() {
 
   raw_lines=$(jq -r --arg Index "$ip_index" --argjson html "$html" --argjson fqdn "${use_fqdn:-false}" "$_JQ_PEER_DEFS"'
     .MagicDNSSuffix as $suffix |
-    ([.Self] + peers) as $all |
+    peers as $peers_only |
+    ([.Self] + $peers_only) as $all |
+    max_name_width($all; $fqdn; $suffix) as $nw |
+    max_ip_width($all; $Index) as $iw |
     # a service may be advertised by several nodes -> show each service only once
-    [ $all[] | .CapMap | select(. != null) | to_entries[] | select(.key | startswith("services/")) | .value[]? | select(.Name != null) ]
-    | unique_by(.Name) | sort_by(.Name) | .[] |
+    services_all($all)[] |
     . as $svc |
     (.Name | sub("^svc:"; "")) as $name |
     (if $fqdn then $name + "." + $suffix else $name end) as $display_name |
-    (if $Index != "" then " (" + (.Addrs[$Index|tonumber] // "?") + ")" else "" end) as $ip |
     [ $all[] | . as $n | select(any(($svc.Addrs // [])[]; . as $sip | (($n.AllowedIPs // []) + ($n.PrimaryRoutes // [])) | any(startswith($sip)))) ] as $hosts |
-    (if ($hosts | length) > 0 then ([ $hosts[] | display_name($all) ] | unique | join(",")) else "" end) as $host_str |
+    (if ($hosts | length) > 0 then ([ $hosts[] | display_name($peers_only) ] | unique | join(",")) else "" end) as $host_str |
     (if ($hosts | length) > 0 then any($hosts[]; .Online) else true end) as $host_online |
     (if $host_str != "" then " [" + $host_str + "]" else "" end) as $host_tag |
+    (
+      if $Index != "" then
+        ($display_name | rpad($nw)) + " " + (("(" + (.Addrs[$Index|tonumber] // "?") + ")") | if $host_tag != "" then rpad($iw) else . end) + $host_tag
+      elif $html and $host_tag != "" then
+        ($display_name | rpad($nw)) + $host_tag
+      else
+        $display_name + $host_tag
+      end
+    ) as $cols |
     (($svc.Addrs // [])[0] // "") as $first_ip |
     ([ ($svc.Ports // [])[] | select(startswith("tcp:")) | sub("^tcp:"; "") ][0] // "") as $first_port |
     [
       (if $host_online then "1" else "0" end),
       $name,
-      ($display_name + $ip + $host_tag),
+      $cols,
       $first_ip,
       $first_port
     ] | @tsv
@@ -281,15 +311,20 @@ _print_status() {
     peers=$(_format_peers "$status_json" "$ip_index" true)
     services=$(_format_services "$status_json" "$ip_index" true)
 
-    self=$(jq -r --arg Index "$ip_index" '
-      "<span> " + (.Self.DNSName | split(".")[0]) + 
-      (if $Index != "" then " (" + .Self.TailscaleIPs[$Index|tonumber] + ")" else "" end) + "</span>"
+    self=$(jq -r --arg Index "$ip_index" --arg ver "$version" "$_JQ_PEER_DEFS"'
+      peers as $all |
+      ([.Self] + $all) as $nodes |
+      max_name_width($nodes; false; .MagicDNSSuffix) as $nw |
+      max_ip_width($nodes; $Index) as $iw |
+      (.Self.DNSName | split(".")[0] | rpad($nw)) as $host |
+      (if $Index != "" then " " + (("(" + .Self.TailscaleIPs[$Index|tonumber] + ")") | rpad($iw)) else "" end) as $ip |
+      "<span> " + $host + $ip + " @ v" + $ver + "</span>"
       ' <<<"$status_json")
 
     exitnode=$(jq -r '.Peer[]? | select(.ExitNode == true).DNSName | split(".")[0]' <<<"$status_json")
 
     jq -nc --arg txt " exit-node: ${exitnode:-none}" \
-      --arg tip "Tailnet: ""$tailnet""${exitnode:+$'\n'"Exit-Node: $exitnode"}"$'\n\n'"$self"$'\n'"  @ v""$version"$'\n'"$peers"${services:+$'\n\n'"Services:"$'\n'"$services"} \
+      --arg tip "<tt>Tailnet: ""$tailnet""${exitnode:+$'\n'"Exit-Node: $exitnode"}"$'\n\n'"$self"$'\n\n'"$peers"${services:+$'\n\n'"$services"}"</tt>" \
       '{"text": $txt, "class": "connected", "alt": "connected", "tooltip": $tip}'
   else
     echo "{\"text\":\"\",\"class\":\"stopped\",\"alt\":\"stopped\", \"tooltip\": \"The VPN is not active.\"}"
