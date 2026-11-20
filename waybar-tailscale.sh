@@ -117,19 +117,20 @@ _format_services() {
 }
 
 get_node() {
-  local status_json raw_peers raw_services selected_line selected_host node_data ip4 ip6 domain options target selected_option
+  local status_json raw_peers raw_services selected_line selected_host ip4 ip6 domain suffix has_ssh options available_actions target selected_option
   status_json=$(tailscale status --json) || return 1
 
   # Format peers and services for picker (using short names, no IP)
   raw_peers=$(_format_peers "$status_json" "" false false)
   raw_services=$(_format_services "$status_json" "" false false)
 
-  selected_line=$(printf "%s\n%s" "$raw_peers" "$raw_services" | grep . | sort -k2 -f | $MENU_CMD) || exit 0
+  # Order: online peers, offline peers (both alphabetical, see _format_peers), then services
+  selected_line=$(printf "%s\n%s" "$raw_peers" "$raw_services" | grep . | $MENU_CMD) || exit 0
 
   if [[ "$selected_line" == "★ "* ]]; then
     # Service selected
     selected_host="${selected_line#★ }"
-    local suffix=$(jq -r '.MagicDNSSuffix' <<<"$status_json")
+    suffix=$(jq -r '.MagicDNSSuffix' <<<"$status_json")
     domain="$selected_host.$suffix"
 
     options=$(jq -r --arg name "svc:$selected_host" '
@@ -149,7 +150,8 @@ get_node() {
       [.DNSName, .TailscaleIPs[0], .TailscaleIPs[-1], $has_ssh] | @tsv
     ' <<<"$status_json")"
     domain="${domain%.}"
-    options="$domain"$'\n'"$ip4"$'\n'"$ip6"
+    # Drop empty values and duplicates (peers with a single IP have ip4 == ip6)
+    options=$(printf "%s\n" "$domain" "$ip4" "$ip6" | awk 'NF && !seen[$0]++')
     available_actions="copy\nopen"
     if [[ "$has_ssh" == "true" ]]; then
       available_actions+="\nssh"
@@ -186,7 +188,7 @@ _menue() {
 }
 
 _print_status() {
-  local status_json ip_index tailnet peers services self exitnode
+  local status_json version ip_index tailnet peers services self exitnode
 
   if ! status_json=$(tailscale status --json 2>/dev/null); then
     echo "{\"text\":\"\",\"class\":\"stopped\",\"alt\":\"stopped\", \"tooltip\": \"tailscaled is not running.\"}"
