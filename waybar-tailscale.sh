@@ -24,8 +24,8 @@ select_exit_node() {
   nodes=$(jq -r '
     [ .Peer[]? | select(.ExitNodeOption == true) ] as $nodes |
     (any($nodes[]; .ExitNode)) as $has_active |
-    (if $has_active then "○ " else "● " end + "None (disable exit node)") as $none_opt |
-    $none_opt, ($nodes[] | (if .ExitNode then "● " else "○ " end) + (.DNSName | rtrimstr(".")))
+    (if $has_active then " " else " " end + "None (disable exit node)") as $none_opt |
+    $none_opt, ($nodes[] | (if .ExitNode then " " else " " end) + (.DNSName | rtrimstr(".")))
   ' <<<"$status_json")
 
   selected=$(echo "$nodes" | $MENU_CMD) || exit 0
@@ -34,7 +34,7 @@ select_exit_node() {
     tailscale set --exit-node=
     notify-send -a "Tailscale" "Exit node disabled"
   else
-    selected_node="${selected#[●○] }"
+    selected_node="${selected#[] }"
     tailscale set --exit-node="$selected_node"
     notify-send -a "Tailscale" "Exit node set to: $selected_node"
   fi
@@ -43,12 +43,12 @@ select_exit_node() {
 switch_tailnet() {
   local list tailnets selected selected_tailnet
   list=$(tailscale switch --list --json) || return 1
-  tailnets=$(jq -r '.[] | (if .selected then "● " else "○ " end) + .tailnet' <<<"$list")
+  tailnets=$(jq -r '.[] | (if .selected then " " else " " end) + .tailnet' <<<"$list")
 
   selected=$(echo "$tailnets" | $MENU_CMD) || exit 0
-  selected_tailnet="${selected#[●○] }"
+  selected_tailnet="${selected#[] }"
 
-  if [[ "$selected" == "● "* ]]; then
+  if [[ "$selected" == " "* ]]; then
     notify-send -a "Tailscale" "Tailnet $selected_tailnet is already active"
   else
     tailscale switch "$selected_tailnet"
@@ -81,7 +81,7 @@ _format_peers() {
     ( [ $all[] | select(.Online) ]       | sort_by(.DNSName) ) +
     ( [ $all[] | select(.Online | not) ] | sort_by(.DNSName) ) |
     .[] |
-    (if .Online then "● " else "○ " end) as $dot |
+    (if .Online then " " else " " end) as $dot |
     (if $fqdn then (.DNSName | rtrimstr(".")) else display_name($all) end) as $host |
     (if $Index != "" then " (" + .TailscaleIPs[$Index|tonumber] + ")" else "" end) as $ip |
     ($dot + $host + $ip) as $text |
@@ -192,11 +192,11 @@ get_node() {
   raw_peers=$(_format_peers "$status_json" "" false false)
   raw_services=$(_format_services "$status_json" "" false false true)
 
-  # Order: online peers (●) + online services (), then offline peers (○) + offline services ()
+  # Order: online peers () + online services (), then offline peers () + offline services ()
   selected_line=$(
     {
-      grep -E '^[●]' <<<"$raw_peers"$'\n'"$raw_services"
-      grep -E '^[○]' <<<"$raw_peers"$'\n'"$raw_services"
+      grep -E '^[]' <<<"$raw_peers"$'\n'"$raw_services"
+      grep -E '^[]' <<<"$raw_peers"$'\n'"$raw_services"
     } | $MENU_CMD
   ) || exit 0
 
@@ -216,7 +216,7 @@ get_node() {
     available_actions="copy\nopen"
   else
     # Peer selected
-    selected_host="${selected_line#[●○] }"
+    selected_host="${selected_line#[] }"
 
     IFS=$'\t' read -r domain ip4 ip6 has_ssh <<<"$(jq -r --arg label "$selected_host" "$_JQ_PEER_DEFS"'
       peers as $all | first($all[] | select(display_name($all) == $label)) |
@@ -282,7 +282,7 @@ _print_status() {
     services=$(_format_services "$status_json" "$ip_index" true)
 
     self=$(jq -r --arg Index "$ip_index" '
-      "<span>● " + (.Self.DNSName | split(".")[0]) + 
+      "<span> " + (.Self.DNSName | split(".")[0]) + 
       (if $Index != "" then " (" + .Self.TailscaleIPs[$Index|tonumber] + ")" else "" end) + "</span>"
       ' <<<"$status_json")
 
