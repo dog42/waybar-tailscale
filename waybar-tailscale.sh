@@ -62,7 +62,8 @@ _format_peers() {
   local use_fqdn="$4"
 
   jq -r --arg Index "$ip_index" --argjson html "$html" --argjson fqdn "${use_fqdn:-false}" '
-    [ .Peer[]? ] as $all |
+    # Ignore stale engine-only peers (e.g. after "tailscale switch"): no name, no IPs, not in netmap
+    [ .Peer[]? | select(.InNetworkMap != false and (.DNSName // "") != "") ] as $all |
     ( [ $all[] | select(.Online) ]       | sort_by(.DNSName) ) +
     ( [ $all[] | select(.Online | not) ] | sort_by(.DNSName) ) |
     .[] |
@@ -183,7 +184,7 @@ _print_status() {
 
     self=$(jq -r --arg Index "$ip_index" '
       "<span>● " + (.Self.DNSName | split(".")[0]) + 
-      (if $Index != "" then " (" + .TailscaleIPs[$Index|tonumber] + ")" else "" end) + "</span>"
+      (if $Index != "" then " (" + .Self.TailscaleIPs[$Index|tonumber] + ")" else "" end) + "</span>"
       ' <<<"$status_json")
 
     exitnode=$(jq -r '.Peer[]? | select(.ExitNode == true).DNSName | split(".")[0]' <<<"$status_json")
